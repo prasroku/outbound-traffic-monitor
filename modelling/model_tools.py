@@ -1,16 +1,14 @@
-import os
 import sqlite3
 
 import joblib
 import numpy as np
 from sklearn.ensemble import IsolationForest
 
-DB_FILE = "traffic.db"
-MODEL_FILE = "baseline.pkl"
+from paths import db_file, model_file
 
 
 def load_samples(limit=1000):
-    conn = sqlite3.connect(DB_FILE)
+    conn = sqlite3.connect(db_file())
     cur = conn.cursor()
     cur.execute("SELECT port, risk_flag FROM traffic_log ORDER BY id DESC LIMIT ?", (limit,))
     rows = cur.fetchall()
@@ -25,10 +23,10 @@ def train_model():
         return None
     clf = IsolationForest(contamination=0.05, random_state=42)
     clf.fit(samples)
-    joblib.dump(clf, MODEL_FILE)
+    joblib.dump(clf, model_file())
     print(f"[*] Model trained on {len(samples)} samples")
     return clf
 
 
 def load_model():
-    return joblib.load(MODEL_FILE) if os.path.exists(MODEL_FILE) else None
+    return joblib.load(model_file()) if model_file().exists() else None

@@ -1,19 +1,21 @@
-import os
 import sqlite3
+import sys
+from pathlib import Path
 
 import matplotlib.pyplot as plt
 
-# Path to DB (relative to project root)
-DB_FILE = os.path.join(os.path.dirname(os.path.dirname(__file__)), "traffic.db")
+sys.path.append(str(Path(__file__).resolve().parent.parent))
+
+from paths import db_file  # noqa: E402
 
 
 def get_country_counts():
     """Fetch connection counts grouped by country."""
-    if not os.path.exists(DB_FILE):
-        print(f"[!] Database not found at {DB_FILE}")
+    if not db_file().exists():
+        print(f"[!] Database not found at {db_file()}")
         return []
 
-    conn = sqlite3.connect(DB_FILE)
+    conn = sqlite3.connect(db_file())
     cur = conn.cursor()
 
     # Ensure table exists

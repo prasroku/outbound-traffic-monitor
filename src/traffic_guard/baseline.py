@@ -38,7 +38,7 @@ def learn_baseline():
             country_to_pctlist[c].append(pct)
 
     # Store baseline
-    conn = sqlite3.connect(db_utils.DB_FILE)
+    conn = sqlite3.connect(db_utils.db_file())
     cur = conn.cursor()
     now_iso = f"{datetime.now(timezone.utc).isoformat()}Z"
     for c, plist in country_to_pctlist.items():

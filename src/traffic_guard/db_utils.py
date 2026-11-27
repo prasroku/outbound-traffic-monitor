@@ -1,15 +1,13 @@
-import os
 import sqlite3
 from datetime import datetime
 
-DB_FILE = os.path.join(os.path.dirname(os.path.dirname(__file__)), "traffic.db")
+from paths import db_file
 
 
 def ensure_schema():
-    conn = sqlite3.connect(DB_FILE)
+    conn = sqlite3.connect(db_file())
     cur = conn.cursor()
-    cur.execute(
-        """
+    cur.execute("""
       CREATE TABLE IF NOT EXISTS country_baseline (
         country TEXT PRIMARY KEY,
         pct_avg REAL NOT NULL,
@@ -17,10 +15,8 @@ def ensure_schema():
         samples INTEGER NOT NULL,
         updated_at TEXT NOT NULL
       );
-    """
-    )
-    cur.execute(
-        """
+    """)
+    cur.execute("""
       CREATE TABLE IF NOT EXISTS alert_log (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         ts TEXT NOT NULL,
@@ -31,14 +27,13 @@ def ensure_schema():
         window_from TEXT,
         window_to TEXT
       );
-    """
-    )
+    """)
     conn.commit()
     conn.close()
 
 
 def fetch_rows(time_from=None, time_to=None):
-    conn = sqlite3.connect(DB_FILE)
+    conn = sqlite3.connect(db_file())
     cur = conn.cursor()
     cur.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='traffic_log';")
     if not cur.fetchone():
@@ -59,7 +54,7 @@ def fetch_rows(time_from=None, time_to=None):
 
 def insert_alert(country, percent, reason, threshold, win_from, win_to):
     ts_iso = f"{datetime.utcnow().isoformat()}Z"
-    conn = sqlite3.connect(DB_FILE)
+    conn = sqlite3.connect(db_file())
     cur = conn.cursor()
     cur.execute(
         """
