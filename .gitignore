@@ -1,0 +1,9 @@
+# Captured traffic and trained models contain real connection history - never commit
+*.db
+*.pkl
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
