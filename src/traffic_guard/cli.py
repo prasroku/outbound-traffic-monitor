@@ -1,6 +1,8 @@
 import argparse
 from datetime import datetime, timedelta, timezone
 
+from modelling import model_tools
+
 from . import baseline, checking
 
 
@@ -20,10 +22,11 @@ def parse_window(win_str):
 
 
 def main():
-    p = argparse.ArgumentParser("LLM Guard")
+    p = argparse.ArgumentParser("Traffic Guard")
     sub = p.add_subparsers(dest="cmd", required=True)
 
     sub.add_parser("learn", help="Update baseline from historical data")
+    sub.add_parser("train", help="Train the anomaly model the monitor uses for alerts")
     c = sub.add_parser("check", help="Check distribution against thresholds")
     c.add_argument("--window", default="24h", help="e.g., 24h, 7d")
     c.add_argument("--global-thresh", type=float, default=30.0)
@@ -34,6 +37,8 @@ def main():
     args = p.parse_args()
     if args.cmd == "learn":
         baseline.learn_baseline()
+    elif args.cmd == "train":
+        model_tools.train_model()
     elif args.cmd == "check":
         f, t = parse_window(args.window)
         checking.check_distribution(f, t, args.global_thresh, args.risk_thresh, args.use_baseline, args.sigma)

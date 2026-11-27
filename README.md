@@ -7,14 +7,16 @@ that looks unusual. Everything stays local in a SQLite file.
 ## How it works
 
 1. **Capture** (`src/monitor_script.py`): every 5 seconds, list established
-   outbound connections with `psutil`, find the owning process, look up the
-   remote IP's country via [ipinfo.io](https://ipinfo.io), and log the row to
-   `traffic.db`. Connections to a small set of high-risk countries
-   (`CN`, `RU`, `IR`, `KP`) get a risk flag.
+   outbound connections to public IPs with `psutil`, find the owning process,
+   look up the remote IP's country via [ipinfo.io](https://ipinfo.io), and log
+   the row to `traffic.db`. A connection is logged once when it opens, not on
+   every cycle it stays open. Loopback and LAN traffic is skipped. Connections
+   to a small set of high-risk countries (`CN`, `RU`, `IR`, `KP`) get a risk
+   flag.
 2. **Anomaly scoring** (`modelling/model_tools.py`): an `IsolationForest`
-   trained on `(port, risk_flag)` scores each new connection. If no model has
-   been trained yet, the monitor just logs (`[LEARN]` mode).
-3. **Baseline + checks** (`src/llm_guard/`): a CLI that learns each country's
+   trained on `(port, risk_flag)` scores each new connection. Until you run
+   `main.py train`, the monitor just logs (`[LEARN]` mode).
+3. **Baseline + checks** (`src/traffic_guard/`): a CLI that learns each country's
    normal daily share of traffic (mean and standard deviation), then checks a
    time window against three rules:
    - a country takes more than `--global-thresh` % of all traffic (default 30)
@@ -32,9 +34,9 @@ that looks unusual. Everything stays local in a SQLite file.
 outbound-traffic-monitor/
 ├── src/
 │   ├── monitor_script.py   # capture loop
-│   ├── main.py             # CLI entry point (learn / check)
+│   ├── main.py             # CLI entry point (learn / train / check)
 │   ├── visualize.py        # matplotlib charts
-│   └── llm_guard/
+│   └── traffic_guard/
 │       ├── cli.py          # argument parsing, --window 24h / 7d
 │       ├── baseline.py     # per-country daily share, mean + std
 │       ├── checking.py     # threshold and sigma checks, writes alerts
@@ -42,9 +44,16 @@ outbound-traffic-monitor/
 ├── modelling/
 │   └── model_tools.py      # IsolationForest train / load
 ├── wrappers/
-│   └── geolocation.py      # ipinfo.io country lookup
-└── requirements.txt
+│   └── geolocation.py      # ipinfo.io country lookup, cached, skips non-public IPs
+├── tests/                  # pytest suite
+├── paths.py                # where traffic.db and baseline.pkl live
+├── requirements.txt
+└── requirements-dev.txt
 ```
+
+`traffic.db` and `baseline.pkl` live in the project root by default, whichever
+directory you run from. Set `TRAFFIC_DB` / `TRAFFIC_MODEL` to put them
+somewhere else.
 
 ## Setup
 
@@ -63,42 +72,41 @@ From the project root:
 # 1. capture traffic (Ctrl+C to stop)
 .venv\Scripts\python.exe src\monitor_script.py
 
-# 2. learn the per-country baseline from what's been captured
+# 2. train the anomaly model (needs 50+ captured connections), then restart the monitor
+.venv\Scripts\python.exe src\main.py train
+
+# 3. learn the per-country baseline from what's been captured
 .venv\Scripts\python.exe src\main.py learn
 
-# 3. check the last 24 hours (or 7d, etc.)
+# 4. check the last 24 hours (or 7d, etc.)
 .venv\Scripts\python.exe src\main.py check --window 24h --use-baseline
 
-# 4. charts
+# 5. charts
 .venv\Scripts\python.exe src\visualize.py
 ```
 
-Seeing every process's connections may need an elevated terminal.
+Seeing every process's connections may need an elevated terminal. Failed
+country lookups (offline, rate limited) are logged as warnings and recorded
+as `??`.
+
+## Tests
+
+```
+.venv\Scripts\python.exe -m pip install -r requirements-dev.txt
+.venv\Scripts\python.exe -m pytest tests
+```
+
+The tests use a temporary database and mock the ipinfo.io calls, so they
+don't touch your real `traffic.db` or the network.
 
 ## Privacy
 
 `traffic.db` and any trained `*.pkl` model are gitignored. They contain your
 real connection history (remote IPs, process names, timestamps), so don't
-commit or share them. Every remote IP the monitor sees is also sent to
-ipinfo.io for the country lookup.
+commit or share them. Each public IP the monitor sees is also sent to
+ipinfo.io for the country lookup, once per run.
 
 ## Known issues
 
-Work in progress. Things I know are broken or rough:
-
-- **Database path isn't consistent.** `monitor_script.py` and `model_tools.py`
-  use `traffic.db` relative to the current directory, `visualize.py` uses the
-  project root, and `llm_guard/db_utils.py` resolves to `src/traffic.db`. The
-  CLI can end up reading a different (empty) database from the one the
-  monitor writes.
-- **The model is never trained.** Nothing calls `train_model()`, so the
-  monitor stays in `[LEARN]` mode and the IsolationForest alerts never fire.
-- **Connections are re-logged every 5 seconds** while they stay open, which
-  inflates long-lived connections in the country percentages.
-- **Every connection triggers an ipinfo.io lookup**, including private and
-  loopback IPs, with no caching, so the free rate limit runs out quickly.
-  Lookup failures are silently recorded as `??`.
-- **A process exiting mid-scan crashes the monitor** (`psutil.NoSuchProcess`
-  is not handled).
-- **`llm_guard` is a misleading name** - there's no LLM involved. It'll be
-  renamed.
+- Running `check`, `learn` or `train` before the monitor has ever run fails
+  with `No table traffic_log found`. Run the monitor first.

@@ -17,9 +17,8 @@ def check_distribution(
 
     countries = [c or "??" for _, c in rows]
     dist = pct_by_country(countries)
-    total = len(countries)
 
-    conn = sqlite3.connect(db_utils.DB_FILE)
+    conn = sqlite3.connect(db_utils.db_file())
     cur = conn.cursor()
     cur.execute("SELECT country, pct_avg, pct_std, samples FROM country_baseline")
     base = {c: (avg, std, n) for c, avg, std, n in cur.fetchall()}
